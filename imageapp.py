@@ -1,4 +1,6 @@
 from flask import *  
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import click
 import requests
 from io import BytesIO
@@ -16,20 +18,27 @@ import matplotlib.pyplot as plt
 import cv2
 from imutils import resize
 import os
+import gc
 
 app = Flask(__name__)  
- 
+limiter = Limiter(
+    app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
+
 @app.route('/')  
 def upload():  
     return render_template("file_upload_form.html")  
  
 @app.route('/success', methods = ['POST'])  
+@limiter.limit("10/minute", override_defaults=False)
 def success():  
     if request.method == 'POST':  
         f = request.files['file']  
         f.save(f.filename) 
         print(f.filename)
-        find_similar_images('images',f.filename, './static/output.png', False, 3)
+        find_similar_images('images',f.filename, './static/output.png', False, 1)
         os.remove(f.filename)
         return render_template("success.html", name = f.filename)  
 
@@ -147,6 +156,7 @@ def get_similar_images(
     columns = 3
     rows = int(np.ceil(n_items + 1 / columns)) + 1
 
+    gc.collect()
     ## Plotting function
     fig = plt.figure(figsize=(2 * rows, 3 * rows))
     for i in range(1, columns * rows + 2):
@@ -163,6 +173,7 @@ def get_similar_images(
             plt.imshow(ret_img)
             plt.axis("off")
             plt.title(response[i - 1][0][1])
+            print(response[i - 1][0][1])
     fig.tight_layout()
     fig.savefig(output_path, bbox_inches="tight", pad_inches=0)
 
